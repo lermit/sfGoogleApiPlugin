@@ -1,0 +1,17 @@
+propel:
+  #_attributes:
+    #package: plugins.sfGoogleApiPlugin.lib.model
+  sf_google_user:
+    id: ~
+    access_token:
+      type: VARCHAR
+      size: 60
+      required: true
+    token_type:
+      type: VARCHAR
+      required: true
+    expiration_date:
+      type: TIMESTAMP
+      required: true
+    service_name:
+      type: VARCHAR
