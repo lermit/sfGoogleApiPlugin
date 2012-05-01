@@ -8,25 +8,49 @@ class GoogleApiMethodBase
     'PUT',
     'DELETE');
   protected
+    /**
+     * The resource path pattern like /tasks/%%id%%
+     */
     $resource_path              = null,
-    $resource_options           = array(),
-    $resource_options_data      = array(),
+    /**
+     * User options (associative array)
+     */
+    $options                    = array(),
+    /**
+     * Required options
+     */
     $resource_options_required  = array(),
+    /**
+     * Additionnal parameter
+     */
+    $additionnal_parameters     = null,
+    /**
+     *  HTTP method to use
+     */
     $method                     = "GET",
+    /**
+     * An array for HTTP parameter -- eg : after question mark or in request body -- Can, may be, be deleted.
+     */
     $parameters                 = array(),
-    $service                    = null;
-    // TODO Think to add scope
+    /**
+     * Google Services like.
+     */
+    $service                    = null,
+    /**
+     * Google scope required by method.
+     */
+    $scopes                     = array();
 
   /**
    * __construct
    *
    * @param array $resource_options Resource Options data
    */
-  function __construct(array $resource_options_data = array())
+  function __construct(array $options = array())
   {
-    if( is_array( $resource_options_data ) )
+    if( is_array( $options ) )
     {
-      $this->resource_options_data = $resource_options_data;
+      $this->options = $options;
     }
 
     $this->configure();
@@ -47,7 +71,7 @@ class GoogleApiMethodBase
   {
     if( ! $service instanceof GoogleApiServiceBase )
     {
-      throw new Exception("You must profide a instance of GoogleApiServiceBase");
+      throw new Exception("You must provide a instance of GoogleApiServiceBase");
     }
     $this->service = $service;
 
@@ -110,43 +134,94 @@ class GoogleApiMethodBase
     }
     else
     {
-      sprintf("%s/%s", $this->resource_path, $resources);
+      $this->resource_path = sprintf("%s/%s", $this->resource_path, $resources);
     }
+
+    return $this;
   }
 
   /**
-   * Add a required resource option.
+   * Add a required resource option. If array is passed, all items will be add.
    *
-   * @param String $option_name Option name
+   * @param mixed $option_name Option name or array of option name
    *
    * @return GoogleApiMethodBase Current object
    */
-  public function addRequiredResourceOption($option_name)
+  public function addRequiredOption($option_name)
   {
+    if ( is_array( $option_name ) )
+    {
+      foreach ( $option_name as $option )
+      {
+        $this->addRequiredOption($option);
+      }
+    }
+
     if ( ! in_array( $option_name, $this->resource_options_required ) )
     {
       $this->resource_options_required[] = $option_name;
-      $this->addOption($option_name);
     }
 
     return $this;
   }
 
   /**
-   * Add a resource option.
+   * Retourn an array of required options
+   *
+   * @return array Required options
+   */
+  public function getRequiredOptions()
+  {
+
+    return $this->resource_options_required;
+  }
+
+  /**
+   * Add a resource option value.
    *
    * @param String $option_name Option name
    *
    * @return GoogleApiMethodBase Current object
    */
-  public function addOption($option_name)
+  public function addOption($option_name, $value)
   {
-    if ( ! in_array( $option_name, $this->resource_options) )
+    // When options list is modify we have to re-compute additionnal_parameter so set this to null
+    $this->additionnal_parameters = null;
+
+    $this->options[$option_name] = $value;
+
+    return $this;
+  }
+
+  /**
+   * Add multiple options with an associative array.
+   *
+   * @param mixed $options An array of options
+   *
+   * @return GoogleApiMethodBase Current object
+   */
+  public function addOptions($options)
+  {
+    if(is_array($options))
     {
-      $this->resource_options[] = $option_name;
+      foreach($options as $option_key => $option_value)
+      {
+        $this->addOption($option_key, $option_value);
+      }
     }
 
     return $this;
+  }
+
+  /**
+   * Get options specified by user.
+   *
+   * @return array Array of options
+   */
+  public function getOptions()
+  {
+
+    return $this->options;
   }
 
   /**
@@ -238,6 +313,70 @@ class GoogleApiMethodBase
   }
 
   /**
+   * Set required google scope for method
+   *
+   * @param array $scopes
+   *
+   * @return GoogleApiMethodBase Current object
+   */
+  public function setScopes($scopes = array())
+  {
+    if(is_array($scopes))
+    {
+      $this->scopes = $scopes;
+    }
+    else
+    {
+      $this->addScope($scopes);
+    }
+
+    return $this;
+  }
+
+  /**
+   * Get all required google scope.
+   *
+   * @return array Array of google scope
+   */
+  public function getScopes()
+  {
+
+    return $this->scopes;
+  }
+
+  /**
+   * Add a required scope
+   *
+   * @param string $scope Scope to add (like tasks, userinfo.email, etc. )
+   * @return GoogleApiMethodBase Current object
+   */
+  public function addScope($scope)
+  {
+    $this->scope[] = $scope;
+
+    return $this;
+  }
+
+  /**
+   * Retourne additionnal parameters
+   *
+   * @return array Additionnals parameters
+   */
+  public function getAdditionnalParameters()
+  {
+    /**
+     * Additionnal parameters are compute by executing generateUrl function
+     */
+    if($this->additionnal_parameters === null)
+    {
+      $this->generateUrl();
+    }
+
+    return $this->additionnal_parameters;
+  }
+
+
+  /**
    * Generate resource path. This resource path will be append to service URL in order to designate desired data
    * Can throw an exception if all required resources options are not set.
    *
@@ -273,9 +412,9 @@ class GoogleApiMethodBase
   {
     foreach( $this->resource_options_required as $required_option )
     {
-      if ( ! in_array( $required_option, $this->resource_options ) )
+      if ( ! in_array( $required_option, $this->options ) )
       {
-        throw new Exception('Required resource option "%s" is not set', $required_option);
+        throw new Exception(sprintf('Required resource option "%s" is not set', $required_option));
       }
     }
   }
@@ -287,15 +426,24 @@ class GoogleApiMethodBase
    */
   protected function buildResourcePath()
   {
+    $additionnal_parameters = $this->options;
     $new_resource_path = $this->resource_path;
-    foreach($this->resource_options as $option)
+    foreach($this->options as $option_key => $option_value)
     {
-      $new_resource_path = strtr(
-        $new_resource_path,
-        sprintf('%%%%%s%%%%',$option),
-        $this->resource_options[$option]
-      );
+      $searched_patern = sprintf('%%%%%s%%%%', $option_key);
+      if(strpos( $new_resource_path, $searched_patern ))
+      {
+        $new_resource_path = str_replace(
+          $searched_patern,
+          $option_value,
+          $new_resource_path
+        );
+
+        unset($additionnal_parameter[$option_key]);
+      }
     }
+
+    $this->additionnal_parameters = $additionnal_parameters;
 
     return $new_resource_path;
   }

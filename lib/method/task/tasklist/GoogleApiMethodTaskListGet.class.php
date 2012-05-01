@@ -1,6 +1,6 @@
 <?php
 
-class GoogleApiMethod extends GoogleApiMethodTaskListBase
+class GoogleApiMethodTaskListGet extends GoogleApiMethodTaskListBase
 {
   public function configure()
   {
