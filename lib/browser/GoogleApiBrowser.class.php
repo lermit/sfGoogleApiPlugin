@@ -14,8 +14,8 @@ class GoogleAPIBrowser
 
   /**
    * Set Google REST Method to execute. (eg : GoogleAPIMethodTaskListGet, ...)
-   * 
-   * @param GoogleApiMethodBase $method 
+   *
+   * @param GoogleApiMethodBase $method
    * @access public
    * @return GoogleAPIBrowser Current object
    */
@@ -33,7 +33,7 @@ class GoogleAPIBrowser
 
   /**
    * Get Google API Method to execute.
-   * 
+   *
    * @access public
    * @return GoogleApiMethodBase Method to execute
    */
@@ -45,16 +45,16 @@ class GoogleAPIBrowser
 
   /**
    * Set connected Google Client (via oauth2).
-   * 
-   * @param GoogleAPIOAuthClient $user 
+   *
+   * @param GoogleAPIOAuthClient $user
    * @access public
    * @return GoogleAPIBrowser Current objectj
    */
-  public function setUser(GoogleAPIOAuthClient $user)
+  public function setUser(SfGoogleUser $user)
   {
-    if ( ! $user instanceof GoogleAPIOAuthClient )
+    if ( ! $user instanceof SfGoogleUser)
     {
-      throw new Exception("You hate to pass a GoogleAPIOAuthClient");
+      throw new Exception("You have to pass a SfGoogleUser");
     }
 
     $this->user = $user;
@@ -64,7 +64,7 @@ class GoogleAPIBrowser
 
   /**
    * Get connect Google Client.
-   * 
+   *
    * @access public
    * @return GoogleAPIOAuthClient Google client
    */
@@ -93,7 +93,7 @@ class GoogleAPIBrowser
 
   /**
    * Get current browser object. This method create a browser if no one is set.
-   * 
+   *
    * @access public
    * @return sfWebBrowser Current browser
    */
@@ -110,13 +110,39 @@ class GoogleAPIBrowser
 
   /**
    * Execute method.
-   * 
+   *
    * @access public
    * @return array() Result
    */
   public function execute()
   {
-    // Est ce que la méthode demande a etre conn
+    $this->authenticate();
+    $this->call();
+
+    /**
+     * We maybe need to reauthenticate user 
+     */
+    if($this->getBrowser()->getResponseCode() != 200)
+    {
+      $this->authenticate();
+      $this->call();
+    }
+
+    if($this->getBrowser()->getResponseCode() == 200)
+    {
+      
+      return true;
+    }
+    else
+    {
+
+      return false;
+    }
+
+  }
+
+  protected function call()
+  {
     $this
       ->getBrowser()
       ->call(
@@ -125,19 +151,33 @@ class GoogleAPIBrowser
         $this->method->getParameters(),
         $this->getHeader());
 
-        // Add auth
+    return $this;
+  }
+
+  public function authenticate()
+  {
+    if(!$this->getUser()->isAuthenticated() ||
+      ($this->getBrowser()->getResponseCode() !== "" && $this->getBrowser()->getResponseCode() != 200))
+    {
+      $this->processAuthenticate();
+    } 
+
+    return $this;
+  }
+
+  protected function processAuthenticate()
+  {
+    sfContext::getInstance()->getRequest()->setParameter("scopes", $this->getMethod()->getScopes());
+    sfContext::getInstance()->getController()->forward("oauth", "signIn");
   }
 
   protected function getHeader()
   {
     return array(
       'Authorization' => sprintf("%s %s",
-        $this->user->getOption('token_type'),
-        $this->user->getOption('access_token')),
+        $this->user->getTokenType(),
+        $this->user->getAccessToken()),
     );
   }
 
-  public function getResult()
-  {
-  }
 }
